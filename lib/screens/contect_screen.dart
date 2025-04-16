@@ -150,6 +150,7 @@ class _ContectScreenState extends State<ContectScreen> {
               sendCommand("STOP");
             } else {
               print("❓ No valid command detected.");
+
             }
           },
         );
