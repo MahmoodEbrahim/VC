@@ -28,6 +28,7 @@ class _ContectScreenState extends State<ContectScreen> {
 
   late stt.SpeechToText _speech;
   bool _isListening = false;
+  String _text = '';
   Future<void> requestMicrophonePermission() async {
     if (await Permission.microphone.request().isGranted) {
       print("🎤 Microphone permission granted.");
@@ -45,8 +46,18 @@ class _ContectScreenState extends State<ContectScreen> {
       discoverServices(connectedDevice!);
     }
     _speech = stt.SpeechToText();
-  }
+    _initSpeech();
 
+  }
+  Future<void> _initSpeech() async {
+    bool available = await _speech.initialize(
+      onStatus: (val) => print('Speech status: $val'),
+      onError: (val) => print('Speech error: $val'),
+    );
+    if (!available) {
+      print("Speech recognition not available");
+    }
+  }
   Future<void> discoverServices(BluetoothDevice device) async {
     var services = await device.discoverServices();
 
@@ -89,86 +100,123 @@ class _ContectScreenState extends State<ContectScreen> {
     }
   }
 
-  Future<void> sendCommand(String command) async {
-    try {
-      if (characteristic == null) {
-        print("❌ Characteristic is null. Can't send command.");
-        return;
-      }
-      List<int> commandBytes = command.codeUnits;
-      print("✅ Sending command: $command | Bytes: $commandBytes");
-      await characteristic!.write(commandBytes, withoutResponse: true);
-      await Future.delayed(Duration(milliseconds: 50));
-    } catch (e) {
-      print("Error sending command: $e");
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sending command: $e')),
-        );
-      }
-    }
+  // Future<void> sendCommand(String command) async {
+  //   try {
+  //     if (characteristic == null) {
+  //       print("❌ Characteristic is null. Can't send command.");
+  //       return;
+  //     }
+  //     List<int> commandBytes = command.codeUnits;
+  //     print("✅ Sending command: $command | Bytes: $commandBytes");
+  //     await characteristic!.write(commandBytes, withoutResponse: true);
+  //     await Future.delayed(Duration(milliseconds: 50));
+  //   } catch (e) {
+  //     print("Error sending command: $e");
+  //     if (context.mounted) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(content: Text('Error sending command: $e')),
+  //       );
+  //     }
+  //   }
+  // }
+
+  // void _listen() async {
+  //   print("🎤 Trying to listen...");
+  //
+  //   if (!_isListening && isPlaying) {
+  //     bool available = await _speech.initialize(
+  //       onStatus: (val) {
+  //         print('🎙️ Speech status: $val');
+  //         if (val == 'done' || val == 'notListening') {
+  //           setState(() => _isListening = false);
+  //           _speech.stop();
+  //         }
+  //       },
+  //       onError: (val) => print('❌ Speech error: $val'),
+  //     );
+  //
+  //     if (available) {
+  //       setState(() => _isListening = true);
+  //       print("✅ Speech initialized. Listening...");
+  //
+  //       _speech.listen(
+  //         localeId: 'ar_EG',
+  //         listenMode: stt.ListenMode.dictation,
+  //         partialResults: false,
+  //         listenFor: Duration(seconds: 5000), // مدة الاستماع
+  //         pauseFor: Duration(seconds: 20000),   // مهلة بعد السكوت
+  //         onResult: (val) {
+  //           String text = val.recognizedWords.toLowerCase();
+  //           print("🎤 Recognized: $text");
+  //
+  //           if (text.contains("الأمام") || text.contains("forward") || text.contains("اذهب") || text.contains("go")) {
+  //             sendCommand("FORWARD");
+  //           } else if (text.contains("الخلف") || text.contains("backward") || text.contains("ارجع") || text.contains("back")) {
+  //             sendCommand("BACKWARD");
+  //           } else if (text.contains("يمين") || text.contains("right")) {
+  //             sendCommand("RIGHT");
+  //           } else if (text.contains("يسار") || text.contains("left")) {
+  //             sendCommand("LEFT");
+  //           } else if (text.contains("توقف") || text.contains("stop") || text.contains("قف")) {
+  //             sendCommand("STOP");
+  //           } else {
+  //             print("❓ No valid command detected.");
+  //
+  //           }
+  //         },
+  //       );
+  //     } else {
+  //       print("⚠️ Speech initialization failed!");
+  //       if (context.mounted) {
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           SnackBar(content: Text('فشل في تهيئة التعرف على الصوت')),
+  //         );
+  //       }
+  //     }
+  //   } else if (_isListening && !isPlaying) {
+  //     print("🛑 Stopping listening...");
+  //     await _speech.stop();
+  //     setState(() => _isListening = false);
+  //     sendCommand("STOP");
+  //   }
+  // }
+  void _sendCommand(String cmd) async {
+    await widget.characteristic!.write(cmd.codeUnits, withoutResponse: true);
   }
+  void _startListening() async {
+    await _speech.listen(
+      localeId: "ar_EG", // تأكد من اللغة
+      onResult: (val) async {
+        setState(() {
+          _text = val.recognizedWords;
+        });
 
-  void _listen() async {
-    print("🎤 Trying to listen...");
+        String command = "";
+        String text = val.recognizedWords.toLowerCase();
 
-    if (!_isListening && isPlaying) {
-      bool available = await _speech.initialize(
-        onStatus: (val) {
-          print('🎙️ Speech status: $val');
-          if (val == 'done' || val == 'notListening') {
-            setState(() => _isListening = false);
-            _speech.stop();
-          }
-        },
-        onError: (val) => print('❌ Speech error: $val'),
-      );
-
-      if (available) {
-        setState(() => _isListening = true);
-        print("✅ Speech initialized. Listening...");
-
-        _speech.listen(
-          localeId: 'ar_EG',
-          listenMode: stt.ListenMode.dictation,
-          partialResults: false,
-          listenFor: Duration(seconds: 5000), // مدة الاستماع
-          pauseFor: Duration(seconds: 20000),   // مهلة بعد السكوت
-          onResult: (val) {
-            String text = val.recognizedWords.toLowerCase();
-            print("🎤 Recognized: $text");
-
-            if (text.contains("الأمام") || text.contains("forward") || text.contains("اذهب") || text.contains("go")) {
-              sendCommand("FORWARD");
-            } else if (text.contains("الخلف") || text.contains("backward") || text.contains("ارجع") || text.contains("back")) {
-              sendCommand("BACKWARD");
-            } else if (text.contains("يمين") || text.contains("right")) {
-              sendCommand("RIGHT");
-            } else if (text.contains("يسار") || text.contains("left")) {
-              sendCommand("LEFT");
-            } else if (text.contains("توقف") || text.contains("stop") || text.contains("قف")) {
-              sendCommand("STOP");
-            } else {
-              print("❓ No valid command detected.");
-
-            }
-          },
-        );
-      } else {
-        print("⚠️ Speech initialization failed!");
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('فشل في تهيئة التعرف على الصوت')),
-          );
+        if (text.contains("الأمام") || text.contains("forward") || text.contains("اذهب") || text.contains("go")) {
+          command = "^";
+        } else if (text.contains("الخلف") || text.contains("backward") || text.contains("ارجع") || text.contains("back")) {
+          command = "-";
+        } else if (text.contains("يمين") || text.contains("right")) {
+          command = ">";
+        } else if (text.contains("يسار") || text.contains("left")) {
+          command = "<";
+        } else if (text.contains("توقف") || text.contains("stop") || text.contains("قف")) {
+          command = "*";
         }
-      }
-    } else if (_isListening && !isPlaying) {
-      print("🛑 Stopping listening...");
-      await _speech.stop();
-      setState(() => _isListening = false);
-      sendCommand("STOP");
-    }
+
+        if (command.isNotEmpty) {
+          await widget.characteristic!.write(command.codeUnits, withoutResponse: true);
+        }
+      },
+    );
   }
+  void _stopListening() async {
+    await _speech.stop();
+    setState(() => _isListening = false);
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -253,13 +301,12 @@ class _ContectScreenState extends State<ContectScreen> {
                   ? GestureDetector(
                 onTap: () {
                   setState(() {
-                    isPlaying = !isPlaying;
-                    print("🎮 isPlaying: $isPlaying");
-                    _listen();
+                    _isListening ? _stopListening() : _startListening();
+                    setState(() => _isListening = !_isListening);
                   });
                 },
                 child: Icon(
-                  isPlaying ? Icons.pause : Icons.play_arrow_outlined,
+                  _isListening ? Icons.mic_off : Icons.mic,
                   size: screenWidth * 0.55,
                   color: Colors.black,
                 ),
@@ -271,7 +318,7 @@ class _ContectScreenState extends State<ContectScreen> {
                     icon: Icon(Icons.arrow_upward_sharp, size: screenWidth * 0.12),
                     onPressed: () {
                       print("⬆️ Forward Pressed");
-                      sendCommand("FORWARD");
+                      _sendCommand('F');
                     },
                   ),
                   Row(
@@ -281,14 +328,14 @@ class _ContectScreenState extends State<ContectScreen> {
                         icon: Icon(Icons.arrow_back_ios, size: screenWidth * 0.12),
                         onPressed: () {
                           print("⬅️ Left Pressed");
-                          sendCommand("LEFT");
+                          _sendCommand('L');
                         },
                       ),
                       SizedBox(width: screenWidth * 0.08),
                       GestureDetector(
                         onTap: () {
                           print("🛑 Stop Pressed");
-                          sendCommand("STOP");
+                          _sendCommand('S');
                         },
                         child: Image.asset("assets/xx/offB.png", height: screenHeight * 0.12),
                       ),
@@ -297,7 +344,7 @@ class _ContectScreenState extends State<ContectScreen> {
                         icon: Icon(Icons.arrow_forward_ios_rounded, size: screenWidth * 0.12),
                         onPressed: () {
                           print("➡️ Right Pressed");
-                          sendCommand("RIGHT");
+                          _sendCommand('R');
                         },
                       ),
                     ],
@@ -307,7 +354,7 @@ class _ContectScreenState extends State<ContectScreen> {
                     icon: Icon(Icons.arrow_downward_outlined, size: screenWidth * 0.12),
                     onPressed: () {
                       print("⬇️ Backward Pressed");
-                      sendCommand("BACKWARD");
+                      _sendCommand('B');
                     },
                   ),
                 ],
